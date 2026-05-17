@@ -19,33 +19,44 @@ Após a validação no gateway, o arquivo precisa ser persistido com durabilidad
 
 ## Arquitetura Proposta
 
-```
-API Gateway
-    │ POST /internal/diagrams
-    │ GET  /internal/process/:id/status
-    ▼
-┌──────────────────────────────────────────────────────────┐
-│               Upload Orchestrator :8081                  │
-│                                                          │
-│  handler/diagram.go  ──▶  usecase/upload_diagram.go      │
-│  handler/status.go   ──▶  usecase/get_status.go          │
-│                                                          │
-│  usecase/update_status.go  ◀──  consumer/processing.go   │
-│                            ◀──  consumer/report.go        │
-│                                                          │
-│  ┌──────────────┐  ┌──────────┐  ┌────────────────────┐ │
-│  │  PostgreSQL  │  │  MinIO   │  │     RabbitMQ       │ │
-│  │  (GORM)      │  │ (upload) │  │  publish + consume  │ │
-│  └──────────────┘  └──────────┘  └────────────────────┘ │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    GW["API Gateway"]
+
+    subgraph UO["Upload Orchestrator :8081"]
+        HD["handler/diagram.go\n→ usecase/upload_diagram.go"]
+        HS["handler/status.go\n→ usecase/get_status.go"]
+        UC["usecase/update_status.go"]
+        CP["consumer/processing.go"]
+        CR["consumer/report.go"]
+        CP --> UC
+        CR --> UC
+    end
+
+    PG[("PostgreSQL (GORM)")]
+    MN[("MinIO")]
+    RMQ["RabbitMQ\npublish + consume"]
+
+    GW -->|"POST /internal/diagrams"| HD
+    GW -->|"GET /internal/process/:id/status"| HS
+    HD --> PG
+    HD --> MN
+    HD --> RMQ
+    HS --> PG
+    UC --> PG
+    RMQ --> CP
+    RMQ --> CR
 ```
 
 ### Máquina de estados
 
-```
-RECEBIDO ──▶ EM_PROCESSAMENTO ──▶ ANALISADO
-    │               │
-    └───────────────┴──▶ ERRO
+```mermaid
+stateDiagram-v2
+    [*] --> RECEBIDO
+    RECEBIDO --> EM_PROCESSAMENTO
+    EM_PROCESSAMENTO --> ANALISADO
+    RECEBIDO --> ERRO
+    EM_PROCESSAMENTO --> ERRO
 ```
 
 | Transição | Gatilho |
@@ -82,36 +93,64 @@ internal/
 
 ### Topologia RabbitMQ
 
-```
-upload-orchestrator → publica em → process.queue (direct)
-processing.topic (fanout) → upload-orchestrator consome (fila exclusiva)
-report.topic (fanout)     → upload-orchestrator consome (fila exclusiva)
+```mermaid
+graph LR
+    UO["upload-orchestrator"]
+    PQ["process.queue\n(direct)"]
+    PT["processing.topic\n(fanout)"]
+    RT["report.topic\n(fanout)"]
+
+    UO -->|publica| PQ
+    PT -->|"fila exclusiva"| UO
+    RT -->|"fila exclusiva"| UO
 ```
 
 ---
 
 ## Fluxo da Solução
 
-```
-POST /internal/diagrams
-  1. Lê Content-Type e X-Filename dos headers (enviados pelo gateway)
-  2. Faz upload do body para MinIO: diagrams/{uuid}
-  3. Cria registro no PostgreSQL: {id, s3_key, content_type, status=RECEBIDO}
-  4. Publica em process.queue: {process_id, s3_key, content_type}
-  5. Retorna 202: {process_id, status, created_at}
+```mermaid
+flowchart TD
+    subgraph POST["POST /internal/diagrams"]
+        P1["Lê Content-Type e X-Filename dos headers"]
+        P2["Upload MinIO: diagrams/{uuid}"]
+        P3["Cria registro PostgreSQL\nstatus = RECEBIDO"]
+        P4["Publica process.queue\n{process_id, s3_key, content_type}"]
+        P5["Retorna 202\n{process_id, status, created_at}"]
+        P1 --> P2 --> P3 --> P4 --> P5
+    end
 
-processing.topic consumer (goroutine)
-  ├─ event=processing_started → UPDATE status=EM_PROCESSAMENTO
-  └─ event=processing_error   → UPDATE status=ERRO, error_msg
+    subgraph PT["processing.topic consumer"]
+        PT1{event?}
+        PT2["UPDATE status = EM_PROCESSAMENTO"]
+        PT3["UPDATE status = ERRO, error_msg"]
+        PT1 -->|processing_started| PT2
+        PT1 -->|processing_error| PT3
+    end
 
-report.topic consumer (goroutine)
-  ├─ event=report_created → UPDATE status=ANALISADO, report_id
-  └─ event=report_failed  → UPDATE status=ERRO, error_msg
+    subgraph RT["report.topic consumer"]
+        RT1{event?}
+        RT2["UPDATE status = ANALISADO\n+ report_id"]
+        RT3["UPDATE status = ERRO, error_msg"]
+        RT1 -->|report_created| RT2
+        RT1 -->|report_failed| RT3
+    end
 
-GET /internal/process/:processId/status
-  1. uuid.Parse(processId) → 400 se inválido
-  2. PostgreSQL FindByID   → 404 se não encontrado
-  3. Retorna {process_id, status, report_id?, error?}
+    subgraph GET["GET /internal/process/:processId/status"]
+        G1["uuid.Parse(processId)"]
+        G2{válido?}
+        G3["400 Bad Request"]
+        G4["PostgreSQL FindByID"]
+        G5{encontrado?}
+        G6["404 Not Found"]
+        G7["200 {process_id, status, report_id?, error?}"]
+        G1 --> G2
+        G2 -->|não| G3
+        G2 -->|sim| G4
+        G4 --> G5
+        G5 -->|não| G6
+        G5 -->|sim| G7
+    end
 ```
 
 ---
