@@ -1,0 +1,22 @@
+README.md
+  s_60452669071828::t_6fbf8f3c0d5883 53-59
+  s_60452669071828::t_5ca0de83488c24 22-48
+  s_60452669071828::t_e5869c7ef83f32 96-105
+  s_60452669071828::t_86d1699f57d8d0 112-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.8",
+  "base_commit_sha": "29497136d452ede58f69b7add698fbb5c92c27f5",
+  "prompts": {},
+  "sessions": {
+    "s_60452669071828": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b5587ec4-d863-4396-86c8-1d2f92375537",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "programanda03 <paganiamanda791@gmail.com>"
+    }
+  }
+}
