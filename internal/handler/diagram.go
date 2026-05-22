@@ -9,6 +9,14 @@ import (
 	"go.uber.org/zap"
 )
 
+var allowedContentTypes = map[string]bool{
+	"image/png":       true,
+	"image/jpeg":      true,
+	"image/gif":       true,
+	"image/svg+xml":   true,
+	"application/pdf": true,
+}
+
 type DiagramHandler struct {
 	uc  *usecase.UploadDiagramUseCase
 	log *zap.Logger
@@ -24,6 +32,10 @@ func (h *DiagramHandler) Upload(c *gin.Context) {
 	contentType := c.GetHeader("Content-Type")
 	if contentType == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Content-Type header is required"})
+		return
+	}
+	if !allowedContentTypes[contentType] {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"error": "unsupported content type"})
 		return
 	}
 
