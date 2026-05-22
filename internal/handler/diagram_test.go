@@ -168,6 +168,39 @@ func TestDiagramHandler_Upload_UseCaseError_Returns500(t *testing.T) {
 	if body["error"] == "" {
 		t.Error("expected error message in 500 response")
 	}
+	if body["error"] == "minio unreachable" {
+		t.Error("internal error detail must not be leaked to the client")
+	}
+}
+
+func TestDiagramHandler_Upload_DisallowedContentType_Returns415(t *testing.T) {
+	r := newDiagramRouter(&diagramMockRepo{}, &diagramMockStorage{}, &diagramMockPublisher{})
+
+	disallowedTypes := []string{
+		"text/html",
+		"application/javascript",
+		"application/x-executable",
+		"text/plain",
+	}
+
+	for _, ct := range disallowedTypes {
+		req := httptest.NewRequest(http.MethodPost, "/internal/diagrams", strings.NewReader("data"))
+		req.Header.Set("Content-Type", ct)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnsupportedMediaType {
+			t.Errorf("content type %q: expected status 415, got %d", ct, w.Code)
+		}
+
+		var body map[string]string
+		if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+			t.Fatalf("content type %q: failed to decode response: %v", ct, err)
+		}
+		if body["error"] == "" {
+			t.Errorf("content type %q: expected error message in response", ct)
+		}
+	}
 }
 
 func TestDiagramHandler_Upload_InvalidContentLength_IsIgnored(t *testing.T) {

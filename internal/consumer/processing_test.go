@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/consumer"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/domain"
@@ -37,22 +38,6 @@ func (m *mockAcknowledger) Reject(tag uint64, requeue bool) error {
 	return nil
 }
 
-// processingMockRepo implementa usecase.ProcessRepository para os testes de ProcessingConsumer.
-type processingMockRepo struct {
-	updateStatusFn func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error
-}
-
-func (m *processingMockRepo) Create(ctx context.Context, p *domain.Process) error { return nil }
-func (m *processingMockRepo) FindByID(ctx context.Context, id string) (*domain.Process, error) {
-	return nil, nil
-}
-func (m *processingMockRepo) UpdateStatus(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
-	if m.updateStatusFn != nil {
-		return m.updateStatusFn(ctx, id, status, reportID, errMsg)
-	}
-	return nil
-}
-
 func newDisabledNRApp(t *testing.T) *newrelic.Application {
 	t.Helper()
 	app, err := newrelic.NewApplication(newrelic.ConfigEnabled(false))
@@ -79,7 +64,7 @@ func runWithDeliveries(c *consumer.ProcessingConsumer, deliveries ...amqp.Delive
 }
 
 func TestProcessingConsumer_Run_InvalidJSON_Nacks(t *testing.T) {
-	repo := &processingMockRepo{}
+	repo := &consumerMockRepo{}
 	log := zap.NewNop()
 	uc := usecase.NewUpdateStatusUseCase(repo, log)
 	nrApp := newDisabledNRApp(t)
@@ -103,7 +88,7 @@ func TestProcessingConsumer_Run_ProcessingStarted_UpdatesStatusAndAcks(t *testin
 	processID := uuid.New().String()
 	var capturedStatus domain.ProcessStatus
 
-	repo := &processingMockRepo{
+	repo := &consumerMockRepo{
 		updateStatusFn: func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
 			capturedStatus = status
 			return nil
@@ -134,7 +119,7 @@ func TestProcessingConsumer_Run_ProcessingError_UpdatesStatusErrorAndAcks(t *tes
 	var capturedStatus domain.ProcessStatus
 	var capturedErrMsg string
 
-	repo := &processingMockRepo{
+	repo := &consumerMockRepo{
 		updateStatusFn: func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
 			capturedStatus = status
 			capturedErrMsg = errMsg
@@ -167,7 +152,7 @@ func TestProcessingConsumer_Run_ProcessingError_UpdatesStatusErrorAndAcks(t *tes
 
 func TestProcessingConsumer_Run_UseCaseError_NacksWithRequeue(t *testing.T) {
 	processID := uuid.New().String()
-	repo := &processingMockRepo{
+	repo := &consumerMockRepo{
 		updateStatusFn: func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
 			return fmt.Errorf("db unavailable")
 		},
@@ -196,7 +181,7 @@ func TestProcessingConsumer_Run_UseCaseError_NacksWithRequeue(t *testing.T) {
 }
 
 func TestProcessingConsumer_Run_ContextCancelled_Stops(t *testing.T) {
-	repo := &processingMockRepo{}
+	repo := &consumerMockRepo{}
 	log := zap.NewNop()
 	uc := usecase.NewUpdateStatusUseCase(repo, log)
 	nrApp := newDisabledNRApp(t)
@@ -207,18 +192,21 @@ func TestProcessingConsumer_Run_ContextCancelled_Stops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancela imediatamente
 
-	// Run deve retornar logo após o contexto ser cancelado
 	done := make(chan struct{})
 	go func() {
 		c.Run(ctx, ch)
 		close(done)
 	}()
 
-	<-done // se Run não retornar, o teste vai travar (timeout)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not stop after context cancellation")
+	}
 }
 
 func TestProcessingConsumer_Run_ChannelClosed_Stops(t *testing.T) {
-	repo := &processingMockRepo{}
+	repo := &consumerMockRepo{}
 	log := zap.NewNop()
 	uc := usecase.NewUpdateStatusUseCase(repo, log)
 	nrApp := newDisabledNRApp(t)
@@ -236,7 +224,7 @@ func TestProcessingConsumer_Run_MultipleMessages(t *testing.T) {
 	processID2 := uuid.New().String()
 	var processedIDs []string
 
-	repo := &processingMockRepo{
+	repo := &consumerMockRepo{
 		updateStatusFn: func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
 			processedIDs = append(processedIDs, id)
 			return nil

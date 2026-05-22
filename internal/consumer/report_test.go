@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/consumer"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/domain"
@@ -13,22 +14,6 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
-
-// reportMockRepo implementa usecase.ProcessRepository para os testes de ReportConsumer.
-type reportMockRepo struct {
-	updateStatusFn func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error
-}
-
-func (m *reportMockRepo) Create(ctx context.Context, p *domain.Process) error { return nil }
-func (m *reportMockRepo) FindByID(ctx context.Context, id string) (*domain.Process, error) {
-	return nil, nil
-}
-func (m *reportMockRepo) UpdateStatus(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
-	if m.updateStatusFn != nil {
-		return m.updateStatusFn(ctx, id, status, reportID, errMsg)
-	}
-	return nil
-}
 
 func runReportConsumerWithDeliveries(c *consumer.ReportConsumer, deliveries ...amqp.Delivery) {
 	ch := make(chan amqp.Delivery, len(deliveries))
@@ -40,7 +25,7 @@ func runReportConsumerWithDeliveries(c *consumer.ReportConsumer, deliveries ...a
 }
 
 func TestReportConsumer_Run_InvalidJSON_Nacks(t *testing.T) {
-	repo := &reportMockRepo{}
+	repo := &consumerMockRepo{}
 	log := zap.NewNop()
 	uc := usecase.NewUpdateStatusUseCase(repo, log)
 	nrApp := newDisabledNRApp(t)
@@ -65,7 +50,7 @@ func TestReportConsumer_Run_ReportCreated_UpdatesStatusAnalyzedAndAcks(t *testin
 	var capturedStatus domain.ProcessStatus
 	var capturedReportID string
 
-	repo := &reportMockRepo{
+	repo := &consumerMockRepo{
 		updateStatusFn: func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
 			capturedStatus = status
 			capturedReportID = reportID
@@ -101,7 +86,7 @@ func TestReportConsumer_Run_ReportFailed_UpdatesStatusErrorAndAcks(t *testing.T)
 	var capturedStatus domain.ProcessStatus
 	var capturedErrMsg string
 
-	repo := &reportMockRepo{
+	repo := &consumerMockRepo{
 		updateStatusFn: func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
 			capturedStatus = status
 			capturedErrMsg = errMsg
@@ -134,7 +119,7 @@ func TestReportConsumer_Run_ReportFailed_UpdatesStatusErrorAndAcks(t *testing.T)
 
 func TestReportConsumer_Run_UseCaseError_NacksWithRequeue(t *testing.T) {
 	processID := uuid.New().String()
-	repo := &reportMockRepo{
+	repo := &consumerMockRepo{
 		updateStatusFn: func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
 			return fmt.Errorf("db timeout")
 		},
@@ -164,7 +149,7 @@ func TestReportConsumer_Run_UseCaseError_NacksWithRequeue(t *testing.T) {
 }
 
 func TestReportConsumer_Run_ContextCancelled_Stops(t *testing.T) {
-	repo := &reportMockRepo{}
+	repo := &consumerMockRepo{}
 	log := zap.NewNop()
 	uc := usecase.NewUpdateStatusUseCase(repo, log)
 	nrApp := newDisabledNRApp(t)
@@ -181,11 +166,15 @@ func TestReportConsumer_Run_ContextCancelled_Stops(t *testing.T) {
 		close(done)
 	}()
 
-	<-done
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not stop after context cancellation")
+	}
 }
 
 func TestReportConsumer_Run_ChannelClosed_Stops(t *testing.T) {
-	repo := &reportMockRepo{}
+	repo := &consumerMockRepo{}
 	log := zap.NewNop()
 	uc := usecase.NewUpdateStatusUseCase(repo, log)
 	nrApp := newDisabledNRApp(t)
@@ -202,7 +191,7 @@ func TestReportConsumer_Run_MultipleMessages(t *testing.T) {
 	processID2 := uuid.New().String()
 	var processedIDs []string
 
-	repo := &reportMockRepo{
+	repo := &consumerMockRepo{
 		updateStatusFn: func(ctx context.Context, id string, status domain.ProcessStatus, reportID, errMsg string) error {
 			processedIDs = append(processedIDs, id)
 			return nil
