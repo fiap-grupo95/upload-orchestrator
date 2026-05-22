@@ -1,0 +1,20 @@
+main.go
+  s_017d8af4510f35::t_08ec897c69d19f 14,29,33-37,44-47,51,55,63,66,72,77,80,83,88,92,96,98,103,107,113-114,126-127,142,144,153,155
+  s_017d8af4510f35::t_3cd12015af27f5 40-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "7432aed73bc09f767857b19227bac51b4bced4e0",
+  "prompts": {},
+  "sessions": {
+    "s_017d8af4510f35": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d66c0fd1-4d70-4b5e-a7af-72838c054fc3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "programanda03 <paganiamanda791@gmail.com>"
+    }
+  }
+}

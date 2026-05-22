@@ -1,0 +1,26 @@
+internal/consumer/processing.go
+  s_017d8af4510f35::t_ac00b82106fd21 8,25-26,30,34,38,67
+  s_017d8af4510f35::t_4d8817b5226573 52-56,68-74,76,82
+internal/handler/status.go
+  s_017d8af4510f35::t_30212e829c0dd2 8,14,17-18
+  s_017d8af4510f35::t_5df92388075dcd 24,28-32,34-37,39-44
+internal/handler/diagram.go
+  s_017d8af4510f35::t_c614f2fa21046d 7,21,24-25
+  s_017d8af4510f35::t_8949239db18f18 30-31,34-36,64-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "15327f440ce78368a7268e75ec2d3e9e4fb4e774",
+  "prompts": {},
+  "sessions": {
+    "s_017d8af4510f35": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d66c0fd1-4d70-4b5e-a7af-72838c054fc3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "programanda03 <paganiamanda791@gmail.com>"
+    }
+  }
+}
