@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/newrelic/go-agent/v3/newrelic"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.uber.org/zap"
 )
 
 // mockAcknowledger implementa amqp.Acknowledger para testes.
@@ -65,10 +64,9 @@ func runWithDeliveries(c *consumer.ProcessingConsumer, deliveries ...amqp.Delive
 
 func TestProcessingConsumer_Run_InvalidJSON_Nacks(t *testing.T) {
 	repo := &consumerMockRepo{}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewProcessingConsumer(uc, nrApp, log)
+	c := consumer.NewProcessingConsumer(uc, nrApp)
 
 	ack := &mockAcknowledger{}
 	runWithDeliveries(c, newDelivery(ack, []byte("invalid-json{")))
@@ -94,10 +92,9 @@ func TestProcessingConsumer_Run_ProcessingStarted_UpdatesStatusAndAcks(t *testin
 			return nil
 		},
 	}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewProcessingConsumer(uc, nrApp, log)
+	c := consumer.NewProcessingConsumer(uc, nrApp)
 
 	body, _ := json.Marshal(map[string]string{
 		"process_id": processID,
@@ -126,10 +123,9 @@ func TestProcessingConsumer_Run_ProcessingError_UpdatesStatusErrorAndAcks(t *tes
 			return nil
 		},
 	}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewProcessingConsumer(uc, nrApp, log)
+	c := consumer.NewProcessingConsumer(uc, nrApp)
 
 	body, _ := json.Marshal(map[string]string{
 		"process_id": processID,
@@ -157,10 +153,9 @@ func TestProcessingConsumer_Run_UseCaseError_NacksWithRequeue(t *testing.T) {
 			return fmt.Errorf("db unavailable")
 		},
 	}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewProcessingConsumer(uc, nrApp, log)
+	c := consumer.NewProcessingConsumer(uc, nrApp)
 
 	body, _ := json.Marshal(map[string]string{
 		"process_id": processID,
@@ -182,10 +177,9 @@ func TestProcessingConsumer_Run_UseCaseError_NacksWithRequeue(t *testing.T) {
 
 func TestProcessingConsumer_Run_ContextCancelled_Stops(t *testing.T) {
 	repo := &consumerMockRepo{}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewProcessingConsumer(uc, nrApp, log)
+	c := consumer.NewProcessingConsumer(uc, nrApp)
 
 	ch := make(chan amqp.Delivery) // canal vazio, não fechado
 
@@ -207,10 +201,9 @@ func TestProcessingConsumer_Run_ContextCancelled_Stops(t *testing.T) {
 
 func TestProcessingConsumer_Run_ChannelClosed_Stops(t *testing.T) {
 	repo := &consumerMockRepo{}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewProcessingConsumer(uc, nrApp, log)
+	c := consumer.NewProcessingConsumer(uc, nrApp)
 
 	ch := make(chan amqp.Delivery)
 	close(ch) // fecha imediatamente
@@ -230,10 +223,9 @@ func TestProcessingConsumer_Run_MultipleMessages(t *testing.T) {
 			return nil
 		},
 	}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewProcessingConsumer(uc, nrApp, log)
+	c := consumer.NewProcessingConsumer(uc, nrApp)
 
 	body1, _ := json.Marshal(map[string]string{"process_id": processID1, "event": "processing_started"})
 	body2, _ := json.Marshal(map[string]string{"process_id": processID2, "event": "processing_started"})

@@ -14,7 +14,6 @@ import (
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/handler"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/usecase"
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 func init() {
@@ -71,9 +70,8 @@ func (m *diagramMockPublisher) Publish(ctx context.Context, queue string, payloa
 }
 
 func newDiagramRouter(repo usecase.ProcessRepository, store usecase.DiagramStorage, pub usecase.EventPublisher) *gin.Engine {
-	log := zap.NewNop()
-	uc := usecase.NewUploadDiagramUseCase(repo, store, pub, "test.queue", log)
-	h := handler.NewDiagramHandler(uc, log)
+	uc := usecase.NewUploadDiagramUseCase(repo, store, pub, "test.queue")
+	h := handler.NewDiagramHandler(uc)
 
 	r := gin.New()
 	r.POST("/internal/diagrams", h.Upload)

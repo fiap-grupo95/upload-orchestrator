@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/domain"
-	"go.uber.org/zap"
 )
 
 func TestUploadDiagramUseCase_Execute_Success(t *testing.T) {
@@ -39,8 +38,7 @@ func TestUploadDiagramUseCase_Execute_Success(t *testing.T) {
 		},
 	}
 
-	log := zap.NewNop()
-	uc := NewUploadDiagramUseCase(repo, storage, publisher, "process.queue", log)
+	uc := NewUploadDiagramUseCase(repo, storage, publisher, "process.queue")
 
 	in := UploadDiagramInput{
 		Content:     strings.NewReader("diagram-content"),
@@ -121,8 +119,7 @@ func TestUploadDiagramUseCase_Execute_StorageError_ReturnsError(t *testing.T) {
 		},
 	}
 
-	log := zap.NewNop()
-	uc := NewUploadDiagramUseCase(repo, storage, publisher, "process.queue", log)
+	uc := NewUploadDiagramUseCase(repo, storage, publisher, "process.queue")
 
 	_, err := uc.Execute(context.Background(), UploadDiagramInput{
 		Content:     strings.NewReader("data"),
@@ -160,8 +157,7 @@ func TestUploadDiagramUseCase_Execute_RepoError_ReturnsError(t *testing.T) {
 		},
 	}
 
-	log := zap.NewNop()
-	uc := NewUploadDiagramUseCase(repo, storage, publisher, "process.queue", log)
+	uc := NewUploadDiagramUseCase(repo, storage, publisher, "process.queue")
 
 	_, err := uc.Execute(context.Background(), UploadDiagramInput{
 		Content:     strings.NewReader("data"),
@@ -190,8 +186,7 @@ func TestUploadDiagramUseCase_Execute_PublisherError_ReturnsError(t *testing.T) 
 		},
 	}
 
-	log := zap.NewNop()
-	uc := NewUploadDiagramUseCase(repo, storage, publisher, "process.queue", log)
+	uc := NewUploadDiagramUseCase(repo, storage, publisher, "process.queue")
 
 	_, err := uc.Execute(context.Background(), UploadDiagramInput{
 		Content:     strings.NewReader("data"),
@@ -211,8 +206,7 @@ func TestUploadDiagramUseCase_Execute_GeneratesUniqueProcessIDs(t *testing.T) {
 	repo := &mockProcessRepo{}
 	publisher := &mockEventPublisher{}
 
-	log := zap.NewNop()
-	uc := NewUploadDiagramUseCase(repo, storage, publisher, "queue", log)
+	uc := NewUploadDiagramUseCase(repo, storage, publisher, "queue")
 
 	out1, err := uc.Execute(context.Background(), UploadDiagramInput{Content: strings.NewReader("a"), ContentType: "image/png"})
 	if err != nil {

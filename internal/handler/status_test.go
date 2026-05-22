@@ -14,7 +14,6 @@ import (
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/usecase"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 // statusMockRepo implementa usecase.ProcessRepository para os testes de StatusHandler.
@@ -34,9 +33,8 @@ func (m *statusMockRepo) UpdateStatus(ctx context.Context, id string, status dom
 }
 
 func newStatusRouter(repo usecase.ProcessRepository) *gin.Engine {
-	log := zap.NewNop()
 	uc := usecase.NewGetStatusUseCase(repo)
-	h := handler.NewStatusHandler(uc, log)
+	h := handler.NewStatusHandler(uc)
 
 	r := gin.New()
 	r.GET("/internal/process/:processId/status", h.GetStatus)

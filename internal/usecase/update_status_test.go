@@ -8,12 +8,11 @@ import (
 
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/domain"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 func TestUpdateStatusUseCase_Execute_InvalidUUID_ReturnsErrInvalidID(t *testing.T) {
 	repo := &mockProcessRepo{}
-	uc := NewUpdateStatusUseCase(repo, zap.NewNop())
+	uc := NewUpdateStatusUseCase(repo)
 
 	cases := []string{"not-a-uuid", "", "abc", "123-456"}
 	for _, id := range cases {
@@ -33,7 +32,7 @@ func TestUpdateStatusUseCase_Execute_RepoError_ReturnsWrappedError(t *testing.T)
 			return repoErr
 		},
 	}
-	uc := NewUpdateStatusUseCase(repo, zap.NewNop())
+	uc := NewUpdateStatusUseCase(repo)
 
 	err := uc.Execute(context.Background(), uuid.New().String(), domain.StatusProcessing, "", "")
 	if err == nil {
@@ -50,7 +49,7 @@ func TestUpdateStatusUseCase_Execute_NotFound_ReturnsWrappedError(t *testing.T) 
 			return domain.ErrProcessNotFound
 		},
 	}
-	uc := NewUpdateStatusUseCase(repo, zap.NewNop())
+	uc := NewUpdateStatusUseCase(repo)
 
 	err := uc.Execute(context.Background(), uuid.New().String(), domain.StatusProcessing, "", "")
 	if !errors.Is(err, domain.ErrProcessNotFound) {
@@ -73,7 +72,7 @@ func TestUpdateStatusUseCase_Execute_Success(t *testing.T) {
 			return nil
 		},
 	}
-	uc := NewUpdateStatusUseCase(repo, zap.NewNop())
+	uc := NewUpdateStatusUseCase(repo)
 
 	err := uc.Execute(context.Background(), processID, domain.StatusAnalyzed, "report-abc", "")
 	if err != nil {
@@ -103,7 +102,7 @@ func TestUpdateStatusUseCase_Execute_WithErrorMsg(t *testing.T) {
 			return nil
 		},
 	}
-	uc := NewUpdateStatusUseCase(repo, zap.NewNop())
+	uc := NewUpdateStatusUseCase(repo)
 
 	err := uc.Execute(context.Background(), processID, domain.StatusError, "", "something went wrong")
 	if err != nil {

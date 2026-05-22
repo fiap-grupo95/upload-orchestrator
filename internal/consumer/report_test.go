@@ -12,7 +12,6 @@ import (
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/usecase"
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.uber.org/zap"
 )
 
 func runReportConsumerWithDeliveries(c *consumer.ReportConsumer, deliveries ...amqp.Delivery) {
@@ -26,10 +25,9 @@ func runReportConsumerWithDeliveries(c *consumer.ReportConsumer, deliveries ...a
 
 func TestReportConsumer_Run_InvalidJSON_Nacks(t *testing.T) {
 	repo := &consumerMockRepo{}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewReportConsumer(uc, nrApp, log)
+	c := consumer.NewReportConsumer(uc, nrApp)
 
 	ack := &mockAcknowledger{}
 	runReportConsumerWithDeliveries(c, newDelivery(ack, []byte("{bad-json")))
@@ -57,10 +55,9 @@ func TestReportConsumer_Run_ReportCreated_UpdatesStatusAnalyzedAndAcks(t *testin
 			return nil
 		},
 	}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewReportConsumer(uc, nrApp, log)
+	c := consumer.NewReportConsumer(uc, nrApp)
 
 	body, _ := json.Marshal(map[string]string{
 		"process_id": processID,
@@ -93,10 +90,9 @@ func TestReportConsumer_Run_ReportFailed_UpdatesStatusErrorAndAcks(t *testing.T)
 			return nil
 		},
 	}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewReportConsumer(uc, nrApp, log)
+	c := consumer.NewReportConsumer(uc, nrApp)
 
 	body, _ := json.Marshal(map[string]string{
 		"process_id": processID,
@@ -124,10 +120,9 @@ func TestReportConsumer_Run_UseCaseError_NacksWithRequeue(t *testing.T) {
 			return fmt.Errorf("db timeout")
 		},
 	}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewReportConsumer(uc, nrApp, log)
+	c := consumer.NewReportConsumer(uc, nrApp)
 
 	body, _ := json.Marshal(map[string]string{
 		"process_id": processID,
@@ -150,10 +145,9 @@ func TestReportConsumer_Run_UseCaseError_NacksWithRequeue(t *testing.T) {
 
 func TestReportConsumer_Run_ContextCancelled_Stops(t *testing.T) {
 	repo := &consumerMockRepo{}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewReportConsumer(uc, nrApp, log)
+	c := consumer.NewReportConsumer(uc, nrApp)
 
 	ch := make(chan amqp.Delivery)
 
@@ -175,10 +169,9 @@ func TestReportConsumer_Run_ContextCancelled_Stops(t *testing.T) {
 
 func TestReportConsumer_Run_ChannelClosed_Stops(t *testing.T) {
 	repo := &consumerMockRepo{}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewReportConsumer(uc, nrApp, log)
+	c := consumer.NewReportConsumer(uc, nrApp)
 
 	ch := make(chan amqp.Delivery)
 	close(ch)
@@ -197,10 +190,9 @@ func TestReportConsumer_Run_MultipleMessages(t *testing.T) {
 			return nil
 		},
 	}
-	log := zap.NewNop()
-	uc := usecase.NewUpdateStatusUseCase(repo, log)
+	uc := usecase.NewUpdateStatusUseCase(repo)
 	nrApp := newDisabledNRApp(t)
-	c := consumer.NewReportConsumer(uc, nrApp, log)
+	c := consumer.NewReportConsumer(uc, nrApp)
 
 	body1, _ := json.Marshal(map[string]string{"process_id": processID1, "report_id": "r1", "event": "report_created"})
 	body2, _ := json.Marshal(map[string]string{"process_id": processID2, "report_id": "r2", "event": "report_created"})
