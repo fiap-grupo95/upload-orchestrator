@@ -5,18 +5,17 @@ import (
 	"net/http"
 
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/domain"
+	"github.com/fiap/secure-systems/upload-orchestrator/internal/logging"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/usecase"
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 type StatusHandler struct {
-	uc  *usecase.GetStatusUseCase
-	log *zap.Logger
+	uc *usecase.GetStatusUseCase
 }
 
-func NewStatusHandler(uc *usecase.GetStatusUseCase, log *zap.Logger) *StatusHandler {
-	return &StatusHandler{uc: uc, log: log}
+func NewStatusHandler(uc *usecase.GetStatusUseCase) *StatusHandler {
+	return &StatusHandler{uc: uc}
 }
 
 // GET /internal/process/:processId/status
@@ -33,7 +32,8 @@ func (h *StatusHandler) GetStatus(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "process not found"})
 			return
 		}
-		h.log.Error("get status failed", zap.String("processId", processID), zap.Error(err))
+		logging.LoggerWithContext(c.Request.Context()).Error().
+			Str("process_id", processID).Err(err).Msg("get status failed")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}

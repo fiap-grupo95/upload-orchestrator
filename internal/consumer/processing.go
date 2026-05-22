@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/domain"
+	"github.com/fiap/secure-systems/upload-orchestrator/internal/logging"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/usecase"
 	"github.com/newrelic/go-agent/v3/newrelic"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.uber.org/zap"
 )
 
 type processingEvent struct {
@@ -20,23 +20,22 @@ type processingEvent struct {
 type ProcessingConsumer struct {
 	uc    *usecase.UpdateStatusUseCase
 	nrApp *newrelic.Application
-	log   *zap.Logger
 }
 
-func NewProcessingConsumer(uc *usecase.UpdateStatusUseCase, nrApp *newrelic.Application, log *zap.Logger) *ProcessingConsumer {
-	return &ProcessingConsumer{uc: uc, nrApp: nrApp, log: log}
+func NewProcessingConsumer(uc *usecase.UpdateStatusUseCase, nrApp *newrelic.Application) *ProcessingConsumer {
+	return &ProcessingConsumer{uc: uc, nrApp: nrApp}
 }
 
 func (c *ProcessingConsumer) Run(ctx context.Context, deliveries <-chan amqp.Delivery) {
-	c.log.Info("processing consumer started")
+	logging.Logger().Info().Msg("processing consumer started")
 	for {
 		select {
 		case <-ctx.Done():
-			c.log.Info("processing consumer stopped")
+			logging.Logger().Info().Msg("processing consumer stopped")
 			return
 		case d, ok := <-deliveries:
 			if !ok {
-				c.log.Warn("processing consumer channel closed")
+				logging.Logger().Warn().Msg("processing consumer channel closed")
 				return
 			}
 			c.handle(d)
@@ -50,7 +49,7 @@ func (c *ProcessingConsumer) handle(d amqp.Delivery) {
 
 	var evt processingEvent
 	if err := json.Unmarshal(d.Body, &evt); err != nil {
-		c.log.Error("invalid processing event payload", zap.Error(err))
+		logging.Logger().Error().Err(err).Msg("invalid processing event payload")
 		d.Nack(false, false)
 		return
 	}
@@ -61,11 +60,11 @@ func (c *ProcessingConsumer) handle(d amqp.Delivery) {
 	}
 
 	ctx := newrelic.NewContext(context.Background(), txn)
+	txn.AddAttribute("process_id", evt.ProcessID)
 	if err := c.uc.Execute(ctx, evt.ProcessID, status, "", evt.ErrorMsg); err != nil {
-		c.log.Error("failed to update status from processing event",
-			zap.String("processId", evt.ProcessID),
-			zap.Error(err),
-		)
+		logging.LoggerWithContext(ctx).Error().
+			Str("process_id", evt.ProcessID).Err(err).
+			Msg("failed to update status from processing event")
 		txn.NoticeError(err)
 		d.Nack(false, true)
 		return

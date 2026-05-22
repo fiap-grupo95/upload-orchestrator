@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/domain"
+	"github.com/fiap/secure-systems/upload-orchestrator/internal/logging"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/usecase"
 	"github.com/newrelic/go-agent/v3/newrelic"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.uber.org/zap"
 )
 
 type reportEvent struct {
@@ -21,23 +21,22 @@ type reportEvent struct {
 type ReportConsumer struct {
 	uc    *usecase.UpdateStatusUseCase
 	nrApp *newrelic.Application
-	log   *zap.Logger
 }
 
-func NewReportConsumer(uc *usecase.UpdateStatusUseCase, nrApp *newrelic.Application, log *zap.Logger) *ReportConsumer {
-	return &ReportConsumer{uc: uc, nrApp: nrApp, log: log}
+func NewReportConsumer(uc *usecase.UpdateStatusUseCase, nrApp *newrelic.Application) *ReportConsumer {
+	return &ReportConsumer{uc: uc, nrApp: nrApp}
 }
 
 func (c *ReportConsumer) Run(ctx context.Context, deliveries <-chan amqp.Delivery) {
-	c.log.Info("report consumer started")
+	logging.Logger().Info().Msg("report consumer started")
 	for {
 		select {
 		case <-ctx.Done():
-			c.log.Info("report consumer stopped")
+			logging.Logger().Info().Msg("report consumer stopped")
 			return
 		case d, ok := <-deliveries:
 			if !ok {
-				c.log.Warn("report consumer channel closed")
+				logging.Logger().Warn().Msg("report consumer channel closed")
 				return
 			}
 			c.handle(d)
@@ -51,7 +50,7 @@ func (c *ReportConsumer) handle(d amqp.Delivery) {
 
 	var evt reportEvent
 	if err := json.Unmarshal(d.Body, &evt); err != nil {
-		c.log.Error("invalid report event payload", zap.Error(err))
+		logging.Logger().Error().Err(err).Msg("invalid report event payload")
 		d.Nack(false, false)
 		return
 	}
@@ -62,11 +61,11 @@ func (c *ReportConsumer) handle(d amqp.Delivery) {
 	}
 
 	ctx := newrelic.NewContext(context.Background(), txn)
+	txn.AddAttribute("process_id", evt.ProcessID)
 	if err := c.uc.Execute(ctx, evt.ProcessID, status, evt.ReportID, evt.ErrorMsg); err != nil {
-		c.log.Error("failed to update status from report event",
-			zap.String("processId", evt.ProcessID),
-			zap.Error(err),
-		)
+		logging.LoggerWithContext(ctx).Error().
+			Str("process_id", evt.ProcessID).Err(err).
+			Msg("failed to update status from report event")
 		txn.NoticeError(err)
 		d.Nack(false, true)
 		return

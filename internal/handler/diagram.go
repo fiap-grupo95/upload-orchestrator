@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/fiap/secure-systems/upload-orchestrator/internal/logging"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/usecase"
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 var allowedContentTypes = map[string]bool{
@@ -18,12 +18,11 @@ var allowedContentTypes = map[string]bool{
 }
 
 type DiagramHandler struct {
-	uc  *usecase.UploadDiagramUseCase
-	log *zap.Logger
+	uc *usecase.UploadDiagramUseCase
 }
 
-func NewDiagramHandler(uc *usecase.UploadDiagramUseCase, log *zap.Logger) *DiagramHandler {
-	return &DiagramHandler{uc: uc, log: log}
+func NewDiagramHandler(uc *usecase.UploadDiagramUseCase) *DiagramHandler {
+	return &DiagramHandler{uc: uc}
 }
 
 // POST /internal/diagrams
@@ -58,7 +57,7 @@ func (h *DiagramHandler) Upload(c *gin.Context) {
 		Filename:    filename,
 	})
 	if err != nil {
-		h.log.Error("upload diagram failed", zap.Error(err))
+		logging.LoggerWithContext(c.Request.Context()).Error().Err(err).Msg("upload diagram failed")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process upload"})
 		return
 	}

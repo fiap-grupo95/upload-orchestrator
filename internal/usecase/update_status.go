@@ -5,17 +5,16 @@ import (
 	"fmt"
 
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/domain"
+	"github.com/fiap/secure-systems/upload-orchestrator/internal/logging"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 type UpdateStatusUseCase struct {
 	repo ProcessRepository
-	log  *zap.Logger
 }
 
-func NewUpdateStatusUseCase(repo ProcessRepository, log *zap.Logger) *UpdateStatusUseCase {
-	return &UpdateStatusUseCase{repo: repo, log: log}
+func NewUpdateStatusUseCase(repo ProcessRepository) *UpdateStatusUseCase {
+	return &UpdateStatusUseCase{repo: repo}
 }
 
 func (uc *UpdateStatusUseCase) Execute(ctx context.Context, processID string, status domain.ProcessStatus, reportID, errMsg string) error {
@@ -27,9 +26,9 @@ func (uc *UpdateStatusUseCase) Execute(ctx context.Context, processID string, st
 		return fmt.Errorf("repository update status: %w", err)
 	}
 
-	uc.log.Info("process status updated",
-		zap.String("processId", processID),
-		zap.String("status", string(status)),
-	)
+	logging.LoggerWithContext(ctx).Info().
+		Str("process_id", processID).
+		Str("status", string(status)).
+		Msg("process status updated")
 	return nil
 }

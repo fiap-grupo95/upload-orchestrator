@@ -11,6 +11,7 @@ import (
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/config"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/consumer"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/handler"
+	"github.com/fiap/secure-systems/upload-orchestrator/internal/logging"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/queue"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/repository"
 	"github.com/fiap/secure-systems/upload-orchestrator/internal/storage"
@@ -18,35 +19,38 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/newrelic/go-agent/v3/integrations/nrgin"
 	"github.com/newrelic/go-agent/v3/newrelic"
-	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func main() {
-	log, _ := zap.NewProduction()
-	defer log.Sync()
-
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("config load failed", zap.Error(err))
+		panic("config load failed: " + err.Error())
 	}
 
 	// ─── New Relic ────────────────────────────────────────────────────────────
-	nrApp, err := newrelic.NewApplication(newrelic.ConfigFromEnvironment())
+	nrApp, err := newrelic.NewApplication(
+		newrelic.ConfigFromEnvironment(),
+		newrelic.ConfigDistributedTracerEnabled(true),
+		newrelic.ConfigAppLogForwardingEnabled(true),
+	)
 	if err != nil {
-		log.Warn("new relic not configured", zap.Error(err))
 		nrApp, _ = newrelic.NewApplication(newrelic.ConfigEnabled(false))
 	}
+
+	// ─── Logging (deve ser inicializado após o New Relic) ─────────────────────
+	logging.Init(nrApp)
+	log := logging.Logger()
 
 	// ─── PostgreSQL (GORM) ────────────────────────────────────────────────────
 	db, err := gorm.Open(postgres.Open(cfg.PostgresDSN), &gorm.Config{})
 	if err != nil {
-		log.Fatal("postgres connect failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("postgres connect failed")
 	}
 	processRepo := repository.NewProcessRepository(db)
 	if err := processRepo.Migrate(); err != nil {
-		log.Fatal("db migration failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("db migration failed")
 	}
 
 	// ─── MinIO ────────────────────────────────────────────────────────────────
@@ -54,58 +58,58 @@ func main() {
 		cfg.MinioEndpoint, cfg.MinioAccessKey, cfg.MinioSecretKey, cfg.MinioBucket, cfg.MinioUseSSL,
 	)
 	if err != nil {
-		log.Fatal("minio init failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("minio init failed")
 	}
 	if err := minioStore.EnsureBucket(context.Background()); err != nil {
-		log.Fatal("minio ensure bucket failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("minio ensure bucket failed")
 	}
 
 	// ─── RabbitMQ ─────────────────────────────────────────────────────────────
 	rmq, err := queue.NewRabbitMQ(cfg.RabbitMQURL)
 	if err != nil {
-		log.Fatal("rabbitmq connect failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("rabbitmq connect failed")
 	}
 	defer rmq.Close()
 
 	if err := rmq.DeclareQueue(cfg.ProcessQueue); err != nil {
-		log.Fatal("declare process queue failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("declare process queue failed")
 	}
 	if err := rmq.DeclareExchange(cfg.ProcessingTopic); err != nil {
-		log.Fatal("declare processing exchange failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("declare processing exchange failed")
 	}
 	if err := rmq.DeclareExchange(cfg.ReportTopic); err != nil {
-		log.Fatal("declare report exchange failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("declare report exchange failed")
 	}
 
 	processingQueue, err := rmq.BindQueue(cfg.ProcessingTopic)
 	if err != nil {
-		log.Fatal("bind processing queue failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("bind processing queue failed")
 	}
 	reportQueue, err := rmq.BindQueue(cfg.ReportTopic)
 	if err != nil {
-		log.Fatal("bind report queue failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("bind report queue failed")
 	}
 
 	// ─── Casos de Uso ─────────────────────────────────────────────────────────
-	uploadUC := usecase.NewUploadDiagramUseCase(processRepo, minioStore, rmq, cfg.ProcessQueue, log)
+	uploadUC := usecase.NewUploadDiagramUseCase(processRepo, minioStore, rmq, cfg.ProcessQueue)
 	getStatusUC := usecase.NewGetStatusUseCase(processRepo)
-	updateStatusUC := usecase.NewUpdateStatusUseCase(processRepo, log)
+	updateStatusUC := usecase.NewUpdateStatusUseCase(processRepo)
 
 	// ─── Consumers ────────────────────────────────────────────────────────────
 	processingDeliveries, err := rmq.Consume(processingQueue)
 	if err != nil {
-		log.Fatal("consume processing queue failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("consume processing queue failed")
 	}
 	reportDeliveries, err := rmq.Consume(reportQueue)
 	if err != nil {
-		log.Fatal("consume report queue failed", zap.Error(err))
+		log.Fatal().Err(err).Msg("consume report queue failed")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go consumer.NewProcessingConsumer(updateStatusUC, nrApp, log).Run(ctx, processingDeliveries)
-	go consumer.NewReportConsumer(updateStatusUC, nrApp, log).Run(ctx, reportDeliveries)
+	go consumer.NewProcessingConsumer(updateStatusUC, nrApp).Run(ctx, processingDeliveries)
+	go consumer.NewReportConsumer(updateStatusUC, nrApp).Run(ctx, reportDeliveries)
 
 	// ─── HTTP (Gin) ───────────────────────────────────────────────────────────
 	gin.SetMode(gin.ReleaseMode)
@@ -117,8 +121,8 @@ func main() {
 
 	internal := r.Group("/internal")
 	{
-		diagramH := handler.NewDiagramHandler(uploadUC, log)
-		statusH := handler.NewStatusHandler(getStatusUC, log)
+		diagramH := handler.NewDiagramHandler(uploadUC)
+		statusH := handler.NewStatusHandler(getStatusUC)
 
 		internal.POST("/diagrams", diagramH.Upload)
 		internal.GET("/process/:processId/status", statusH.GetStatus)
@@ -133,9 +137,9 @@ func main() {
 	}
 
 	go func() {
-		log.Info("upload-orchestrator started", zap.String("port", cfg.Port))
+		log.Info().Str("port", cfg.Port).Msg("upload-orchestrator started")
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal("server error", zap.Error(err))
+			log.Fatal().Err(err).Msg("server error")
 		}
 	}()
 
@@ -144,7 +148,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Error("shutdown error", zap.Error(err))
+		log.Error().Err(err).Msg("shutdown error")
 	}
-	log.Info("upload-orchestrator stopped")
+	log.Info().Msg("upload-orchestrator stopped")
 }
