@@ -21,20 +21,28 @@ func NewStatusHandler(uc *usecase.GetStatusUseCase) *StatusHandler {
 // GET /internal/process/:processId/status
 func (h *StatusHandler) GetStatus(c *gin.Context) {
 	processID := c.Param("processId")
+	log := logging.LoggerWithContext(c.Request.Context())
 
 	out, err := h.uc.Execute(c.Request.Context(), processID)
 	if err != nil {
-		if errors.Is(err, domain.ErrInvalidID) {
+		switch {
+		case errors.Is(err, domain.ErrInvalidID):
+			log.Warn().
+				Str("process_id", processID).
+				Msg("get status rejected: invalid process id format")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid process id"})
-			return
-		}
-		if errors.Is(err, domain.ErrProcessNotFound) {
+		case errors.Is(err, domain.ErrProcessNotFound):
+			log.Warn().
+				Str("process_id", processID).
+				Msg("get status: process not found")
 			c.JSON(http.StatusNotFound, gin.H{"error": "process not found"})
-			return
+		default:
+			log.Error().
+				Err(err).
+				Str("process_id", processID).
+				Msg("get status failed")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		}
-		logging.LoggerWithContext(c.Request.Context()).Error().
-			Str("process_id", processID).Err(err).Msg("get status failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 

@@ -26,10 +26,14 @@ func NewDiagramHandler(uc *usecase.UploadDiagramUseCase) *DiagramHandler {
 }
 
 // POST /internal/diagrams
-// Recebe o arquivo raw no body; headers Content-Type e X-Filename enviados pelo gateway.
 func (h *DiagramHandler) Upload(c *gin.Context) {
+	log := logging.LoggerWithContext(c.Request.Context())
+
 	contentType := c.GetHeader("Content-Type")
 	if contentType == "" {
+		log.Warn().
+			Str("remote_addr", c.ClientIP()).
+			Msg("upload rejected: missing Content-Type header")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Content-Type header is required"})
 		return
 	}
@@ -57,7 +61,12 @@ func (h *DiagramHandler) Upload(c *gin.Context) {
 		Filename:    filename,
 	})
 	if err != nil {
-		logging.LoggerWithContext(c.Request.Context()).Error().Err(err).Msg("upload diagram failed")
+		log.Error().
+			Err(err).
+			Str("content_type", contentType).
+			Str("filename", filename).
+			Int64("size_bytes", size).
+			Msg("upload diagram failed")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process upload"})
 		return
 	}

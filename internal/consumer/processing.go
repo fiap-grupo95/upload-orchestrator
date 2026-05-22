@@ -49,7 +49,11 @@ func (c *ProcessingConsumer) handle(d amqp.Delivery) {
 
 	var evt processingEvent
 	if err := json.Unmarshal(d.Body, &evt); err != nil {
-		logging.Logger().Error().Err(err).Msg("invalid processing event payload")
+		logging.Logger().Error().
+			Err(err).
+			Int("body_size", len(d.Body)).
+			Msg("invalid processing event payload")
+		txn.NoticeError(err)
 		d.Nack(false, false)
 		return
 	}
@@ -61,14 +65,20 @@ func (c *ProcessingConsumer) handle(d amqp.Delivery) {
 
 	ctx := newrelic.NewContext(context.Background(), txn)
 	txn.AddAttribute("process_id", evt.ProcessID)
+	txn.AddAttribute("event", evt.Event)
+
+	log := logging.LoggerWithContext(ctx).With().
+		Str("process_id", evt.ProcessID).
+		Str("event", evt.Event).
+		Logger()
+
 	if err := c.uc.Execute(ctx, evt.ProcessID, status, "", evt.ErrorMsg); err != nil {
-		logging.LoggerWithContext(ctx).Error().
-			Str("process_id", evt.ProcessID).Err(err).
-			Msg("failed to update status from processing event")
+		log.Error().Err(err).Msg("failed to update status from processing event")
 		txn.NoticeError(err)
 		d.Nack(false, true)
 		return
 	}
 
+	log.Info().Str("new_status", string(status)).Msg("process status updated")
 	d.Ack(false)
 }
